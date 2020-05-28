@@ -5,7 +5,7 @@
 # @email: luguang.huang@mabotech.com
 from watchdog.observers import Observer
 import traceback
-from watchdog.events import *
+from watchdog.events import FileSystemEventHandler
 import requests
 import time
 import os
@@ -32,7 +32,8 @@ class FileEventHandler(FileSystemEventHandler):
         else:
             print(self.convert_path(event.src_path))
             pdf_path = self.convert_path(event.src_path)
-            self.upload_pdf(pdf_path)
+            if 'pdf' in pdf_path.split('.')[-1].lower():
+                self.upload_pdf(pdf_path)
             logger.info("file created:{0}".format(event.src_path))
 
     def on_deleted(self, event):
@@ -55,27 +56,52 @@ class FileEventHandler(FileSystemEventHandler):
     def upload_pdf(self, file_path: str):
 
         url = constant.upload_url
-        files = {'pdf': open(file_path, 'rb')}
+        f = None
         try:
+            f = open(file_path, 'rb')
+            files = {'pdf': f}
             response = requests.post(url=url, files=files, headers={})
             response.encoding = response.apparent_encoding
             res = json.loads(response.text)
             if isinstance(res, dict) and res['isSuccess'] is False:
                 logger.error(response.text.encode('utf-8').decode('unicode_escape'))
                 logger.error('文件上传失败：文件路径{}'.format(file_path))
+            else:
+                logger.info('{}上传成功'.format(file_path))
         except Exception as e:
             logger.error(traceback.format_exc())
+        finally:
+            if f:
+                f.close()
 
 
-if __name__ == "__main__":
-    monitor_dir = constant.Monitorfolder
-    observer = Observer()
-    event_handler = FileEventHandler()
-    observer.schedule(event_handler, monitor_dir, True)
-    observer.start()
+def run():
+    observer = None
+    try:
+        monitor_dir = constant.Monitorfolder
+        observer = Observer()
+        event_handler = FileEventHandler()
+        observer.schedule(event_handler, monitor_dir, True)
+        observer.start()
+    except FileNotFoundError:
+        logger.error("请在桌面新建pdf文件夹")
+        time.sleep(5)
+        # 重试
+        run()
+
     try:
         while True:
             time.sleep(1)
-    except KeyboardInterrupt:
+    except Exception:
+        logger.error(traceback.format_exc())
         observer.stop()
     observer.join()
+
+if __name__ == "__main__":
+
+    try:
+        run()
+    except Exception:
+        logger.error(traceback.format_exc())
+
+

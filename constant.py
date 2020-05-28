@@ -3,5 +3,7 @@
 # @author  : Huanglg
 # @fileName: constant.py
 # @email: luguang.huang@mabotech.com
-Monitorfolder = r"C:\Users\huanglg\Desktop\pdf"
+import os
+
+Monitorfolder = os.path.join(os.path.expanduser("~"), 'Desktop', 'pdf')
 upload_url = "http://10.220.29.28:5000/api/v1/upload_pdf"
