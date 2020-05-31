@@ -6,6 +6,7 @@
 from watchdog.observers import Observer
 import traceback
 from watchdog.events import FileSystemEventHandler
+from requests.exceptions import ConnectionError
 import requests
 import time
 import os
@@ -68,8 +69,13 @@ class FileEventHandler(FileSystemEventHandler):
                 logger.error('文件上传失败：文件路径{}'.format(file_path))
             else:
                 logger.info('{}上传成功'.format(file_path))
-        except Exception as e:
+        except ConnectionError:
             logger.error(traceback.format_exc())
+            logger.error('网络中断,{0}：上传失败，已经重试多次！'.format(file_path))
+        except PermissionError:
+            # 重试
+            time.sleep(1)
+            self.upload_pdf(file_path)
         finally:
             if f:
                 f.close()
@@ -100,6 +106,7 @@ def run():
 if __name__ == "__main__":
 
     try:
+        logger.info("正常运行中.....")
         run()
     except Exception:
         logger.error(traceback.format_exc())
