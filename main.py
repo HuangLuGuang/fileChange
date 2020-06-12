@@ -8,13 +8,15 @@ import traceback
 from watchdog.events import FileSystemEventHandler
 from requests.exceptions import ConnectionError
 import requests
+import toml
 import time
 import os
 import json
 
-import constant
 from Logger import Logger
 
+upload_url = "http://10.220.29.28:5000/api/v1/upload_pdf"
+device_no = "00001"
 logger = Logger()
 
 class FileEventHandler(FileSystemEventHandler):
@@ -34,6 +36,8 @@ class FileEventHandler(FileSystemEventHandler):
             print(self.convert_path(event.src_path))
             pdf_path = self.convert_path(event.src_path)
             if 'pdf' in pdf_path.split('.')[-1].lower():
+                time.sleep(1)
+                print(pdf_path)
                 self.upload_pdf(pdf_path)
             logger.info("file created:{0}".format(event.src_path))
 
@@ -56,22 +60,22 @@ class FileEventHandler(FileSystemEventHandler):
 
     def upload_pdf(self, file_path: str):
 
-        url = constant.upload_url
         f = None
         try:
             f = open(file_path, 'rb')
             files = {'pdf': f}
-            response = requests.post(url=url, files=files, headers={})
+            data = {"device_no": device_no}
+            response = requests.post(url=upload_url, data=data, files=files, headers={})
             response.encoding = response.apparent_encoding
             res = json.loads(response.text)
             if isinstance(res, dict) and res['isSuccess'] is False:
                 logger.error(response.text.encode('utf-8').decode('unicode_escape'))
-                logger.error('文件上传失败：文件路径{}'.format(file_path))
+                logger.error('upload filed：file path:{}'.format(file_path))
             else:
-                logger.info('{}上传成功'.format(file_path))
+                logger.info('{}upload successful'.format(file_path))
         except ConnectionError:
             logger.error(traceback.format_exc())
-            logger.error('网络中断,{0}：上传失败，已经重试多次！'.format(file_path))
+            logger.error('network connect failed,{0}：upload filed，retry such times！'.format(file_path))
         except PermissionError:
             # 重试
             time.sleep(1)
@@ -84,13 +88,19 @@ class FileEventHandler(FileSystemEventHandler):
 def run():
     observer = None
     try:
-        monitor_dir = constant.Monitorfolder
+        # 加载配置文件
+        config = toml.load('config.toml')
+        monitor_dir = config.get('monitor_folder', os.path.join(os.path.expanduser("~"), 'Desktop', 'pdf'))
+        global upload_url, device_no
+        upload_url = config.get('upload_url', "http://10.220.29.28:5000/api/v1/upload_pdf")
+        device_no = config.get('device_no')
+        # 开始监控文件夹
         observer = Observer()
         event_handler = FileEventHandler()
         observer.schedule(event_handler, monitor_dir, True)
         observer.start()
     except FileNotFoundError:
-        logger.error("请在桌面新建pdf文件夹")
+        logger.error("please check config file")
         time.sleep(5)
         # 重试
         run()
@@ -106,7 +116,7 @@ def run():
 if __name__ == "__main__":
 
     try:
-        logger.info("正常运行中.....")
+        logger.info("running.....")
         run()
     except Exception:
         logger.error(traceback.format_exc())
