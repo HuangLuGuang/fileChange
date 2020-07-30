@@ -7,6 +7,9 @@ from watchdog.observers import Observer
 import traceback
 from watchdog.events import FileSystemEventHandler
 from requests.exceptions import ConnectionError
+from win32event import CreateMutex
+from win32api import GetLastError, MessageBox
+from win32con import MB_OK
 import requests
 import toml
 import time
@@ -99,11 +102,13 @@ def run():
         event_handler = FileEventHandler()
         observer.schedule(event_handler, monitor_dir, True)
         observer.start()
+        # 提示运行成功
+        logger.info("running.....")
+        MessageBox(0, 'The successful running', "info", MB_OK)
     except FileNotFoundError:
         logger.error("please check config file")
-        time.sleep(5)
-        # 重试
-        run()
+        MessageBox(0, 'The Directory not found, please check config file', "error", MB_OK)
+        raise
 
     try:
         while True:
@@ -115,10 +120,17 @@ def run():
 
 if __name__ == "__main__":
 
-    try:
-        logger.info("running.....")
-        run()
-    except Exception:
-        logger.error(traceback.format_exc())
+    # 文件互斥，保证运行一次
+    mutex = CreateMutex(None, True, 'file_change_mabo_tech')
+    last_error = GetLastError()
+
+    if last_error > 0:
+        # 如果已经运行给出提示
+        MessageBox(0, 'Please do not repeat！', "warning", MB_OK)
+    else:
+        try:
+            run()
+        except Exception:
+            logger.error(traceback.format_exc())
 
 
